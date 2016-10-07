@@ -43,7 +43,7 @@ function populateClientExports(exports) {
     exports.PivotColDefService = pivotColDefService_1.PivotColDefService;
     exports.PivotStage = pivotStage_1.PivotStage;
     exports.SetFilter = setFilter_1.SetFilter;
-    exports.SetFilter = setFilterListItem_1.SetFilterListItem;
+    exports.SetFilterListItem = setFilterListItem_1.SetFilterListItem;
     exports.SetFilterModel = setFilterModel_1.SetFilterModel;
     exports.StatusBar = statusBar_1.StatusBar;
     exports.StatusItem = statusItem_1.StatusItem;
