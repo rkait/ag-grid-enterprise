@@ -12,18 +12,25 @@ export class PivotColDefService {
 
     public createPivotColumnDefs(uniqueValues: any): PivotColDefServiceResult {
 
+        // this is passed to the columnController, to configure the columns and groups we show
         var pivotColumnGroupDefs: (ColDef|ColGroupDef)[] = [];
+        // this is used by the aggregation stage, to do the aggregation based on the pivot columns
         var pivotColumnDefs: ColDef[] = [];
 
         var pivotColumns = this.columnController.getPivotColumns();
         var levelsDeep = pivotColumns.length;
         var columnIdSequence = new NumberSequence();
 
-        this.recursivelyAddGroup(pivotColumnGroupDefs, pivotColumnDefs, 1, uniqueValues, [], columnIdSequence, levelsDeep);
+        this.recursivelyAddGroup(pivotColumnGroupDefs, pivotColumnDefs, 1, uniqueValues, [], columnIdSequence, levelsDeep, pivotColumns);
+
+        // we clone, so the colDefs in pivotColumnsGroupDefs and pivotColumnDefs are not shared. this is so that
+        // any changes the user makes (via processSecondaryColumnDefinitions) don't impact the internal aggregations,
+        // as these use the col defs also
+        var pivotColumnDefsClone: ColDef[] = pivotColumnDefs.map(colDef => Utils.cloneObject(colDef) );
 
         return {
             pivotColumnGroupDefs: pivotColumnGroupDefs,
-            pivotColumnDefs: pivotColumnDefs
+            pivotColumnDefs: pivotColumnDefsClone
         };
     }
 
@@ -32,7 +39,7 @@ export class PivotColDefService {
     // @uniqueValues - the values for which we should create a col for
     // @pivotKeys - the keys for the pivot, eg if pivoting on {Language,Country} then could be {English,Ireland}
     private recursivelyAddGroup(parentChildren: (ColGroupDef|ColDef)[], pivotColumnDefs: ColDef[], index: number, uniqueValues: any,
-                                pivotKeys: string[], columnIdSequence: NumberSequence, levelsDeep: number): void {
+                                pivotKeys: string[], columnIdSequence: NumberSequence, levelsDeep: number, primaryPivotColumns: Column[]): void {
 
         Utils.iterateObject(uniqueValues, (key: string, value: any)=> {
 
@@ -43,16 +50,18 @@ export class PivotColDefService {
             if (createGroup) {
                 var groupDef: ColGroupDef = {
                     children: [],
-                    headerName: key
+                    headerName: key,
+                    pivotKeys: newPivotKeys
                 };
                 parentChildren.push(groupDef);
-                this.recursivelyAddGroup(groupDef.children, pivotColumnDefs, index+1, value, newPivotKeys, columnIdSequence, levelsDeep);
+                this.recursivelyAddGroup(groupDef.children, pivotColumnDefs, index+1, value, newPivotKeys, columnIdSequence, levelsDeep, primaryPivotColumns);
             } else {
 
                 var measureColumns = this.columnController.getValueColumns();
                 var valueGroup: ColGroupDef = {
                     children: [],
-                    headerName: key
+                    headerName: key,
+                    pivotKeys: newPivotKeys
                 };
                 parentChildren.push(valueGroup);
                 // if no value columns selected, then we insert one blank column, so the user at least sees columns
@@ -60,24 +69,26 @@ export class PivotColDefService {
                 // impression that the grid is broken
                 if (measureColumns.length===0) {
                     // this is the blank column, for when no value columns enabled.
-                    var colDef = this.createColDef(null, '-', newPivotKeys, columnIdSequence, `'n/a'`);
+                    var colDef = this.createColDef(null, '-', newPivotKeys, columnIdSequence);
                     valueGroup.children.push(colDef);
                     pivotColumnDefs.push(colDef);
                 } else {
                     measureColumns.forEach( measureColumn => {
-                        var colDef = this.createColDef(measureColumn, measureColumn.getColDef().headerName, newPivotKeys, columnIdSequence, null);
+                        var colDef = this.createColDef(measureColumn, measureColumn.getColDef().headerName, newPivotKeys, columnIdSequence);
                         valueGroup.children.push(colDef);
                         pivotColumnDefs.push(colDef);
                     });
                 }
-                valueGroup.children.sort(this.headerNameComparator.bind(this));
-
             }
-            parentChildren.sort(this.headerNameComparator.bind(this));
         });
+        // sort by either user provided comparator, or our own one
+        var colDef = primaryPivotColumns[index-1].getColDef();
+        var userComparator = colDef.pivotComparator;
+        var comparator = this.headerNameComparator.bind(this, userComparator);
+        parentChildren.sort(comparator);
     }
 
-    private createColDef(valueColumn: Column, headerName: any, pivotKeys: string[], columnIdSequence: NumberSequence, valueGetter: string): ColDef {
+    private createColDef(valueColumn: Column, headerName: any, pivotKeys: string[], columnIdSequence: NumberSequence): ColDef {
 
         var colDef: ColDef = {};
 
@@ -89,7 +100,6 @@ export class PivotColDefService {
             colDef.hide = false;
         }
 
-        colDef.valueGetter = valueGetter;
         colDef.headerName = headerName;
         colDef.colId = 'pivot_' + columnIdSequence.next();
 
@@ -99,13 +109,17 @@ export class PivotColDefService {
         return colDef;
     }
 
-    private headerNameComparator(a: ColGroupDef|ColDef, b: ColGroupDef|ColDef): number {
-        if (a.headerName<b.headerName) {
-            return -1;
-        } else if (a.headerName>b.headerName) {
-            return 1;
+    private headerNameComparator(userComparator: (a: string, b: string)=>number, a: ColGroupDef|ColDef, b: ColGroupDef|ColDef): number {
+        if (userComparator) {
+            return userComparator(a.headerName, b.headerName);
         } else {
-            return 0;
+            if (a.headerName<b.headerName) {
+                return -1;
+            } else if (a.headerName>b.headerName) {
+                return 1;
+            } else {
+                return 0;
+            }
         }
     }
 }

@@ -156,7 +156,7 @@ export class ClipboardService implements IClipboardService {
                 var cellId = new GridCell(currentRow.rowIndex, currentRow.floating, column).createId();
                 cellsToFlash[cellId] = true;
 
-                if (index === 0) {
+                if (updatedColumnIds.indexOf(column.getId()) < 0) {
                     updatedColumnIds.push(column.getId());
                 }
 
@@ -235,7 +235,7 @@ export class ClipboardService implements IClipboardService {
             if (!includeHeaders) { return; }
 
             columns.forEach( (column, index) => {
-                var value = this.columnController.getDisplayNameForCol(column, true);
+                var value = this.columnController.getDisplayNameForColumn(column, true);
                 if (index != 0) {
                     data += '\t';
                 }
